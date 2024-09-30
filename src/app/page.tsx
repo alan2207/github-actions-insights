@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,26 +40,9 @@ import {
   useWorkflows,
 } from "./data";
 import { StatusBadge } from "./_components/status-badge";
-import { formatDuration } from "./utils";
+import { formatDuration, useDebounce } from "./utils";
 import { ApiKeyManager } from "./_components/api-key-manager";
 import { GenerateReport } from "./_components/generate-report";
-
-export function useDebounce<T extends (...args: any[]) => void>(
-  fn: T,
-  delay: number
-): (...args: Parameters<T>) => void {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  return useCallback(
-    (...args: Parameters<T>) => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      timeoutRef.current = setTimeout(() => fn(...args), delay);
-    },
-    [fn, delay]
-  );
-}
 
 const formatDateRange = (dateRange: DateRange | undefined) => {
   if (!dateRange) return undefined;
