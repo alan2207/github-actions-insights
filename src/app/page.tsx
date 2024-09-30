@@ -1,113 +1,398 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { DateRange } from "react-day-picker";
+import {
+  useBranch,
+  useConclusion,
+  useDateRange,
+  useOwner,
+  useRepo,
+  useWorkflowId,
+  useWorkflowRuns,
+  useWorkflows,
+} from "./data";
+import { StatusBadge } from "./_components/status-badge";
+import { formatDuration } from "./utils";
+import { ApiKeyManager } from "./_components/api-key-manager";
+import { GenerateReport } from "./_components/generate-report";
+
+export function useDebounce<T extends (...args: any[]) => void>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  return useCallback(
+    (...args: Parameters<T>) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => fn(...args), delay);
+    },
+    [fn, delay]
+  );
+}
+
+const formatDateRange = (dateRange: DateRange | undefined) => {
+  if (!dateRange) return undefined;
+  return {
+    from: dateRange.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
+    to: dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
+  };
+};
+
+export default function GitHubActionsInspector() {
+  const [owner, setOwner] = useOwner();
+  const [repo, setRepo] = useRepo();
+  const [workflowId, setWorkflowId] = useWorkflowId();
+  const [formattedDateRange, setFormattedDateRange] = useDateRange();
+  const [conclusion, setConclusion] = useConclusion();
+
+  // Local state for immediate input display
+  const [localOwner, setLocalOwner] = useState(owner ?? "");
+  const [localRepo, setLocalRepo] = useState(repo ?? "");
+  const [localWorkflowId, setLocalWorkflowId] = useState(
+    workflowId?.toString() ?? ""
+  );
+  const [localConclusion, setLocalConclusion] = useState(conclusion ?? "");
+
+  // Debounced setters
+  const debouncedSetOwner = useDebounce(setOwner, 300);
+  const debouncedSetRepo = useDebounce(setRepo, 300);
+  const debouncedSetWorkflowId = useDebounce(
+    (value: string) => setWorkflowId(+value),
+    300
+  );
+  const debouncedSetConclusion = useDebounce(setConclusion, 300);
+
+  // Update handlers
+  const handleOwnerChange = useCallback(
+    (value: string) => {
+      setLocalOwner(value);
+      debouncedSetOwner(value);
+    },
+    [debouncedSetOwner]
+  );
+
+  const handleRepoChange = useCallback(
+    (value: string) => {
+      setLocalRepo(value);
+      debouncedSetRepo(value);
+    },
+    [debouncedSetRepo]
+  );
+
+  const handleWorkflowIdChange = useCallback(
+    (value: string) => {
+      setLocalWorkflowId(value);
+      debouncedSetWorkflowId(value);
+    },
+    [debouncedSetWorkflowId]
+  );
+
+  const handleConclusionChange = useCallback(
+    (value: string) => {
+      setLocalConclusion(value);
+      debouncedSetConclusion(value);
+    },
+    [debouncedSetConclusion]
+  );
+
+  const [selectedRuns, setSelectedRuns] = useState<number[]>([]);
+  const [lastClickedRunId, setLastClickedRunId] = useState<number | null>(null);
+  const [branch, setBranch] = useBranch();
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const [from, to] = formattedDateRange?.split("..") ?? [];
+    return {
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+    };
+  });
+
+  useEffect(() => {
+    const formattedDateRange = formatDateRange(dateRange);
+
+    if (!formattedDateRange?.from || !formattedDateRange?.to) {
+      return;
+    }
+
+    setFormattedDateRange(
+      `${formattedDateRange?.from}..${formattedDateRange?.to}`
+    );
+  }, [dateRange, setFormattedDateRange]);
+
+  const workflowsQuery = useWorkflows();
+  const workflows = workflowsQuery.data?.workflows;
+
+  const workflowRunsQuery = useWorkflowRuns({
+    per_page: 100,
+  });
+  const workflowRuns = workflowRunsQuery.data?.pages.flatMap(
+    (page) => page.workflow_runs
+  );
+
+  useEffect(() => {
+    if (
+      !workflowRunsQuery.isFetching &&
+      !workflowRunsQuery.isFetchingNextPage &&
+      workflowRunsQuery.hasNextPage
+    ) {
+      workflowRunsQuery.fetchNextPage();
+    }
+  }, [workflowRunsQuery]);
+
+  const toggleRunSelection = (runId: number) => {
+    setSelectedRuns((prevSelectedRuns) => {
+      if (prevSelectedRuns.includes(runId)) {
+        return prevSelectedRuns.filter((id) => id !== runId);
+      }
+      return [...prevSelectedRuns, runId];
+    });
+  };
+
+  const toggleAllRuns = () => {
+    setSelectedRuns((prevSelectedRuns) => {
+      if (prevSelectedRuns.length === workflowRuns?.length) {
+        return [];
+      } else {
+        return workflowRuns?.map((run) => run.id) || [];
+      }
+    });
+  };
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:size-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
+    <div className="container mx-auto p-4">
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">GitHub Actions Insights</h1>
+        <ApiKeyManager />
+      </div>
+
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>Workflows</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <Input
+              placeholder="GitHub Owner"
+              value={localOwner}
+              onChange={(e) => handleOwnerChange(e.target.value)}
             />
-          </a>
-        </div>
-      </div>
+            <Input
+              placeholder="GitHub Repo"
+              value={localRepo}
+              onChange={(e) => handleRepoChange(e.target.value)}
+            />
+            <Select
+              value={localWorkflowId}
+              onValueChange={handleWorkflowIdChange}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a workflow" />
+              </SelectTrigger>
+              <SelectContent>
+                {workflows?.map((workflow) => (
+                  <SelectItem key={workflow.id} value={workflow.id.toString()}>
+                    {workflow.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
-      <div className="relative z-[-1] flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle className="flex justify-between items-center mb-4">
+            <span>Workflow Runs</span>
+            <span>Total: {workflowRuns?.length}</span>
+            <span>Selected: {selectedRuns.length}</span>
+            {workflowRuns && (
+              <GenerateReport
+                workflowRuns={workflowRuns?.filter((run) =>
+                  selectedRuns.includes(run.id)
+                )}
+              />
+            )}
+          </CardTitle>
 
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-balance text-sm opacity-50">
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <Select
+              value={localConclusion}
+              onValueChange={handleConclusionChange}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by conclusion" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="success">Success</SelectItem>
+                <SelectItem value="failure">Failure</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              value={branch ?? ""}
+              onChange={(e) => setBranch(e.target.value)}
+              placeholder="Filter by branch name"
+            />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={`w-full justify-start text-left font-normal ${
+                    !dateRange?.from && !dateRange?.to
+                      ? "text-muted-foreground"
+                      : ""
+                  }`}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateRange?.from ? (
+                    dateRange?.to ? (
+                      <>
+                        {format(dateRange.from, "LLL dd, y")} -{" "}
+                        {format(dateRange.to, "LLL dd, y")}
+                      </>
+                    ) : (
+                      format(dateRange.from, "LLL dd, y")
+                    )
+                  ) : (
+                    "Pick a date range"
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  initialFocus
+                  mode="range"
+                  defaultMonth={dateRange?.from}
+                  selected={dateRange}
+                  onSelect={setDateRange}
+                  numberOfMonths={2}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        </CardHeader>
+        {(workflowRuns?.length || 0) > 0 && (
+          <CardContent className="overflow-hidden">
+            <div className="overflow-auto h-[calc(100vh-440px)]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[50px] sticky top-0 bg-background z-10">
+                      <Checkbox
+                        checked={workflowRuns?.length === selectedRuns.length}
+                        onCheckedChange={toggleAllRuns}
+                      />
+                    </TableHead>
+                    <TableHead className="bg-background z-10">Run #</TableHead>
+                    <TableHead className="bg-background z-10">Status</TableHead>
+                    <TableHead className="bg-background z-10">
+                      Conclusion
+                    </TableHead>
+                    <TableHead className="bg-background z-10">Branch</TableHead>
+                    <TableHead className="bg-background z-10">Commit</TableHead>
+                    <TableHead className="bg-background z-10">
+                      Started At
+                    </TableHead>
+                    <TableHead className="bg-background z-10">
+                      Duration
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {workflowRuns?.map((run) => {
+                    const startedAt = run.run_started_at
+                      ? new Date(run.run_started_at)
+                      : null;
+                    const updatedAt = run.updated_at
+                      ? new Date(run.updated_at)
+                      : null;
+                    const duration =
+                      !updatedAt || !startedAt
+                        ? 0
+                        : (updatedAt.getTime() - startedAt.getTime()) / 1000; // duration in seconds
+                    return (
+                      <TableRow
+                        key={run.id}
+                        onClick={() => setLastClickedRunId(run.id)}
+                        className={
+                          lastClickedRunId === run.id ? "bg-gray-200" : ""
+                        }
+                      >
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedRuns.includes(run.id)}
+                            onCheckedChange={() => toggleRunSelection(run.id)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <a
+                            href={run.html_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:underline"
+                          >
+                            {run.id}
+                          </a>
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={run.status} />
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={run.conclusion} />{" "}
+                        </TableCell>
+                        <TableCell>{run.head_branch}</TableCell>
+                        <TableCell>
+                          <a
+                            href={`https://github.com/${owner}/${repo}/commit/${run.head_commit?.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:underline"
+                          >
+                            {run.head_commit?.message?.slice(0, 20)}...
+                          </a>
+                        </TableCell>
+                        <TableCell>{startedAt?.toLocaleString()}</TableCell>
+                        <TableCell>{formatDuration(duration)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+    </div>
   );
 }
