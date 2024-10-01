@@ -9,6 +9,7 @@ import {
   PersistedClient,
   Persister,
 } from "@tanstack/react-query-persist-client";
+// import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 export function createIDBPersister(idbValidKey: IDBValidKey = "reactQuery") {
   return {
@@ -47,6 +48,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       }}
       client={queryClient}
     >
+      {/* <ReactQueryDevtools initialIsOpen={false} /> */}
       {children}
     </PersistQueryClientProvider>
   );

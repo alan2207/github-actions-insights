@@ -159,6 +159,7 @@ export const getWorkflowRunJobs = async ({
       started_at: job.started_at,
       completed_at: job.completed_at,
       status: job.status,
+      steps: job.steps,
     })),
   };
 };
@@ -196,3 +197,176 @@ export const useWorkflowRunJobs = ({
     enabled: Boolean(owner && repo && runId),
   });
 };
+
+type FailureInfo = {
+  lineNumbers: number[];
+  context: string;
+  keyword: string;
+  severity: string;
+  occurrences: number;
+};
+
+const stripLineInfo = (line: string) => {
+  // Replace digits in the datetime prefix with 'X'
+  let strippedLine = line.replace(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z\s+/,
+    (match) => match.replace(/\d/g, "X")
+  );
+
+  // Replace artifact ID in the name more generically
+  strippedLine = strippedLine.replace(
+    /(\bname:\s+.*-pw-)\d+(-\d+-[a-f0-9]+)(\.tar\.gz)/,
+    "$1XXXXXXXXXX-X-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX$3"
+  );
+
+  return strippedLine;
+};
+
+const findFailureInLogs = (logContent: string) => {
+  const lines = logContent.split("\n");
+  const errorKeywords = [
+    "error",
+    "failed",
+    "exception",
+    "fatal",
+    "crash",
+    "unexpected",
+  ];
+  const contextSize = 3;
+
+  const failureMap = new Map<string, FailureInfo>();
+
+  lines.forEach((line, index) => {
+    const strippedLine = stripLineInfo(line);
+    const lowerCaseLine = strippedLine.toLowerCase();
+
+    // Use a regular expression to match keywords case-insensitively
+    const matchedKeyword = errorKeywords.find((keyword) =>
+      new RegExp(`\\b${keyword}\\b`, "i").test(strippedLine)
+    );
+
+    if (matchedKeyword) {
+      const contextLines = lines
+        .slice(
+          Math.max(0, index - contextSize),
+          Math.min(lines.length, index + contextSize + 1)
+        )
+        .map(stripLineInfo);
+      const context = contextLines.join("\n");
+
+      // Create a unique key for similar contexts
+      const contextKey = context.toLowerCase();
+
+      if (failureMap.has(contextKey)) {
+        const existingFailure = failureMap.get(contextKey)!;
+        existingFailure.lineNumbers.push(index + 1);
+        existingFailure.occurrences++;
+      } else {
+        failureMap.set(contextKey, {
+          lineNumbers: [index + 1],
+          context,
+          keyword: matchedKeyword,
+          severity: getSeverity(matchedKeyword),
+          occurrences: 1,
+        });
+      }
+    }
+  });
+
+  const groupedFailures = Array.from(failureMap.values());
+  return groupedFailures.length > 0 ? groupedFailures : null;
+};
+
+const getSeverity = (keyword: string): string => {
+  switch (keyword) {
+    case "fatal":
+    case "crash":
+      return "critical";
+    case "error":
+    case "exception":
+      return "high";
+    case "failed":
+    case "unexpected":
+      return "medium";
+    default:
+      return "low";
+  }
+};
+
+export const useJobLogs = ({
+  jobId,
+  isPreviewOpen,
+  started_at,
+  completed_at,
+}: {
+  jobId: number;
+  isPreviewOpen: boolean;
+  started_at: string | null;
+  completed_at: string | null;
+}) => {
+  const [owner] = useOwner();
+  const [repo] = useRepo();
+
+  return useQuery({
+    queryKey: ["jobLogs", jobId, started_at, completed_at],
+    gcTime: 0,
+    queryFn: async () => {
+      const res = await octokit.actions.downloadJobLogsForWorkflowRun({
+        owner: owner ?? "",
+        repo: repo ?? "",
+        job_id: jobId,
+      });
+
+      const response = await fetch(res.url);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const fullLogs = await response.text();
+
+      // Filter logs based on started_at and completed_at
+      const filteredLogs = filterLogsByDateRange(
+        fullLogs,
+        started_at,
+        completed_at
+      );
+
+      // Remove content between "##[group]Fetching the repository" and the next "##[endgroup]"
+      const modifiedLogs = filteredLogs.replace(
+        /##\[group\]Fetching the repository[\s\S]*?##\[endgroup\]/,
+        ""
+      );
+
+      return findFailureInLogs(modifiedLogs);
+    },
+    enabled: isPreviewOpen,
+  });
+};
+
+function filterLogsByDateRange(
+  logs: string,
+  started_at: string | null,
+  completed_at: string | null
+): string {
+  if (!started_at || !completed_at) return logs;
+
+  const lines = logs.split("\n");
+  const startDate = new Date(started_at);
+  const endDate = new Date(completed_at);
+
+  // Pad the start date by subtracting 100 milliseconds
+  startDate.setMilliseconds(startDate.getMilliseconds() - 300);
+  // Pad the end date by adding 10 milliseconds
+  endDate.setMilliseconds(endDate.getMilliseconds() + 300);
+
+  const filteredLines = lines.filter((line) => {
+    // return true;
+    const match = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)/);
+    if (match) {
+      const lineDate = new Date(match[1]);
+      return lineDate >= startDate && lineDate <= endDate;
+    }
+    return false;
+  });
+
+  return filteredLines.join("\n");
+}

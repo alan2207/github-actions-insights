@@ -22,7 +22,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { ExternalLink } from "lucide-react";
+
 import { getWorkflowRunJobs, useOwner, useRepo } from "../data";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -33,14 +33,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { WorkflowRun } from "../types";
+import { FailedJobs } from "./failed-jobs";
 
 type JobStats = {
   success: number;
@@ -48,8 +45,17 @@ type JobStats = {
   cancelled: number;
   skipped: number;
   totalDuration: number;
-  failedWorkflows: { name: string; url: string }[];
-  failedJobs: { name: string; url: string }[];
+  failedJobs: {
+    name: string;
+    url: string;
+    id: number;
+    started_at: string;
+    failedStep: {
+      name: string;
+      started_at: string;
+      completed_at: string;
+    } | null | undefined;
+  }[];
   count: number;
 };
 
@@ -147,7 +153,6 @@ export function GenerateReport({
                   skipped: 0,
                   totalDuration: 0,
                   count: 0,
-                  failedWorkflows: [],
                   failedJobs: [],
                 };
               }
@@ -168,13 +173,19 @@ export function GenerateReport({
                 new Date(job.started_at ?? "").getTime();
 
               if (conclusion === "failure") {
-                jobStats[job.name].failedWorkflows.push({
-                  name: run.id.toString(),
-                  url: run.html_url,
-                });
+                const failedStep = job.steps?.find(
+                  (step) => step.conclusion === "failure"
+                );
                 jobStats[job.name].failedJobs.push({
                   name: job.id.toString(),
                   url: job.html_url ?? "",
+                  id: job.id,
+                  started_at: job.started_at ?? "",
+                  failedStep: {
+                    name: failedStep?.name ?? "",
+                    started_at: failedStep?.started_at ?? "",
+                    completed_at: failedStep?.completed_at ?? "",
+                  },
                 });
               }
 
@@ -193,6 +204,8 @@ export function GenerateReport({
       setIsLoading(false);
     }
   };
+
+  console.log({ report });
 
   useEffect(() => {
     if (!isOpen) {
@@ -320,41 +333,10 @@ export function GenerateReport({
                               s
                             </TableCell>
                             <TableCell>
-                              {stats.failedJobs.length > 0 ? (
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <Button variant="outline" size="sm">
-                                      View ({stats.failedJobs.length})
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-80">
-                                    <h3 className="font-semibold mb-2">
-                                      Failed Jobs
-                                    </h3>
-                                    <ScrollArea className="h-[200px] overflow-y-auto">
-                                      <ul className="space-y-2">
-                                        {stats.failedJobs.map((job, index) => (
-                                          <li key={index}>
-                                            <a
-                                              href={job.url}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-blue-500 hover:underline flex items-center"
-                                            >
-                                              {job.name}
-                                              <ExternalLink className="w-4 h-4 ml-1" />
-                                            </a>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </ScrollArea>
-                                  </PopoverContent>
-                                </Popover>
-                              ) : (
-                                <Button variant="outline" size="sm" disabled>
-                                  View (0)
-                                </Button>
-                              )}
+                              <FailedJobs
+                                jobName={jobName}
+                                failedJobs={stats.failedJobs}
+                              />
                             </TableCell>
                           </TableRow>
                         ))}
