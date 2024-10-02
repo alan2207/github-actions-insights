@@ -38,6 +38,8 @@ import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { WorkflowRun } from "../types";
 import { FailedJobs } from "./failed-jobs";
+import { EyeIcon } from "lucide-react";
+import { Export } from "./export";
 
 type JobStats = {
   success: number;
@@ -210,8 +212,6 @@ export function GenerateReport({
     }
   };
 
-  console.log({ report });
-
   useEffect(() => {
     if (!isOpen) {
       setReport(null);
@@ -235,12 +235,58 @@ export function GenerateReport({
           onClick={() => generateReport("", showCancelled, showSkipped)}
           disabled={isLoading || workflowRuns.length === 0}
         >
-          {isLoading ? "Generating..." : "Generate Workflow Report"}
+          {isLoading ? (
+            "Generating..."
+          ) : (
+            <>
+              <EyeIcon className="w-4 h-4 mr-2" /> View Stats
+            </>
+          )}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle>Report</DialogTitle>
+          <DialogTitle>
+            Report
+            <Export
+              name={`jobs`}
+              generateJSONContent={() => {
+                const json = JSON.stringify(report, null, 2);
+                return json;
+              }}
+              generateCSVContent={() => {
+                const headers = [
+                  "Job Name",
+                  "Success",
+                  "Failure",
+                  "Cancelled",
+                  "Skipped",
+                  "Count",
+                  "Total Duration",
+                  "Failed Jobs",
+                ];
+                const rows = Object.entries(report?.jobStats ?? {}).map(
+                  ([jobName, stats]) => [
+                    jobName,
+                    stats.success,
+                    stats.failure,
+                    stats.cancelled,
+                    stats.skipped,
+                    stats.count,
+                    stats.totalDuration,
+                    stats.failedJobs.length,
+                  ]
+                );
+
+                const csv = [
+                  headers.join(","),
+                  ...rows.map((row) => row.join(",")),
+                ].join("\n");
+
+                return csv;
+              }}
+            />
+          </DialogTitle>
           <DialogDescription>
             Summary of workflow runs and job statistics
           </DialogDescription>

@@ -10,7 +10,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -43,6 +49,7 @@ import { StatusBadge } from "./_components/status-badge";
 import { formatDuration, useDebounce } from "./utils";
 import { ApiKeyManager } from "./_components/api-key-manager";
 import { GenerateReport } from "./_components/generate-report";
+import { Export } from "./_components/export";
 
 const formatDateRange = (dateRange: DateRange | undefined) => {
   if (!dateRange) return undefined;
@@ -217,15 +224,61 @@ export default function GitHubActionsInspector() {
         <CardHeader>
           <CardTitle className="flex justify-between items-center mb-4">
             <span>Workflow Runs</span>
-            <span>Total: {workflowRuns?.length}</span>
-            <span>Selected: {selectedRuns.length}</span>
-            {workflowRuns && (
-              <GenerateReport
-                workflowRuns={workflowRuns?.filter((run) =>
-                  selectedRuns.includes(run.id)
-                )}
-              />
-            )}
+            <div className="flex items-center space-x-2 gap-3">
+              {workflowRuns && (
+                <GenerateReport
+                  workflowRuns={workflowRuns?.filter((run) =>
+                    selectedRuns.includes(run.id)
+                  )}
+                />
+              )}
+              {workflowRuns && (
+                <Export
+                  name={`${owner}-${repo}-workflow_runs-${
+                    branch || "all-branches"
+                  }-${formattedDateRange}-${conclusion}`}
+                  disabled={selectedRuns.length === 0}
+                  generateJSONContent={() =>
+                    JSON.stringify(
+                      workflowRuns?.filter((run) =>
+                        selectedRuns.includes(run.id)
+                      ),
+                      null,
+                      2
+                    )
+                  }
+                  generateCSVContent={() => {
+                    const headers = [
+                      "Run ID",
+                      "Status",
+                      "Conclusion",
+                      "Branch",
+                      "Commit ID",
+                      "Started At",
+                      "Updated At",
+                    ];
+
+                    const csv = [
+                      headers.join(","),
+                      ...(workflowRuns
+                        ?.filter((run) => selectedRuns.includes(run.id))
+                        .map((run) =>
+                          [
+                            run.id,
+                            run.status,
+                            run.conclusion,
+                            run.head_branch,
+                            run.head_commit?.id,
+                            run.run_started_at,
+                            run.updated_at,
+                          ].join(",")
+                        ) ?? []),
+                    ].join("\n");
+                    return csv;
+                  }}
+                />
+              )}
+            </div>
           </CardTitle>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
@@ -287,7 +340,7 @@ export default function GitHubActionsInspector() {
         </CardHeader>
         {(workflowRuns?.length || 0) > 0 && (
           <CardContent className="overflow-hidden">
-            <div className="overflow-auto h-[calc(100vh-440px)]">
+            <div className="overflow-auto h-[calc(100vh-470px)]">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -375,6 +428,9 @@ export default function GitHubActionsInspector() {
             </div>
           </CardContent>
         )}
+        <CardFooter className="text-sm">
+          {selectedRuns.length} of {workflowRuns?.length} Selected
+        </CardFooter>
       </Card>
     </div>
   );

@@ -29,13 +29,8 @@ import { ExternalLink, EyeIcon, PencilIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
+import { Export } from "./export";
 
 function useLocalStorageState<T>(
   key: string,
@@ -189,91 +184,10 @@ export function FailedJobs({ jobName, failedJobs }: FailedJobsProps) {
     {} as Record<string, Job[]>
   );
 
-  const handleExportToCSV = (type: "download" | "copy") => {
-    const groupedData = Object.entries(groupedFailedJobs).flatMap(
-      ([failure, jobs]) =>
-        jobs.map((job) => ({
-          failure,
-          job: job.name,
-          branch: job.branch,
-          url: job.url,
-          failedStep: job.failedStep?.name,
-          started_at: job.started_at,
-        }))
-    );
-
-    const headers = [
-      "Failure",
-      "Job",
-      "Branch",
-      "URL",
-      "Failed Step",
-      "Started At",
-    ];
-    const csvString = [
-      headers.join(","),
-      ...groupedData.map((row) =>
-        [
-          row.failure,
-          row.job,
-          row.branch,
-          row.url,
-          row.failedStep,
-          row.started_at,
-        ].join(",")
-      ),
-    ].join("\n");
-
-    if (type === "download") {
-      const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${jobName}-failed-jobs.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } else if (type === "copy") {
-      navigator.clipboard.writeText(csvString);
-    }
-  };
-
-  const handleExportToJSON = (type: "download" | "copy") => {
-    const groupedData = Object.entries(groupedFailedJobs).map(
-      ([failure, jobs]) => ({
-        failure,
-        jobs: jobs.map((job) => ({
-          job: job.name,
-          branch: job.branch,
-          url: job.url,
-          failedStep: job.failedStep?.name,
-          started_at: job.started_at,
-        })),
-      })
-    );
-
-    const json = JSON.stringify(groupedData, null, 2);
-
-    if (type === "download") {
-      const blob = new Blob([json], {
-        type: "application/json;charset=utf-8;",
-      });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${jobName}-failed-jobs.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } else if (type === "copy") {
-      navigator.clipboard.writeText(json);
-    }
-  };
-
   return (
     <Dialog>
       <DialogTrigger>
-        <Button variant="outline">
+        <Button variant="outline" size="sm">
           <EyeIcon className="w-4 h-4 mr-2" />
           Failed Jobs
         </Button>
@@ -283,31 +197,64 @@ export function FailedJobs({ jobName, failedJobs }: FailedJobsProps) {
           <div className="flex justify-between items-center">
             <DialogTitle>Failed Jobs for {jobName}</DialogTitle>
 
-            <div className="flex items-center space-x-2 mr-4">
-              <DropdownMenu>
-                <DropdownMenuTrigger>
-                  <Button variant="outline">Export</Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem
-                    onClick={() => handleExportToJSON("download")}
-                  >
-                    Download JSON
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExportToJSON("copy")}>
-                    Copy JSON to clipboard
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => handleExportToCSV("download")}
-                  >
-                    Download CSV
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExportToCSV("copy")}>
-                    Copy CSV to clipboard
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <Export
+              name={`${jobName}-failed-jobs.json`}
+              generateCSVContent={() => {
+                const groupedData = Object.entries(groupedFailedJobs).flatMap(
+                  ([failure, jobs]) =>
+                    jobs.map((job) => ({
+                      failure,
+                      job: job.name,
+                      branch: job.branch,
+                      url: job.url,
+                      failedStep: job.failedStep?.name,
+                      started_at: job.started_at,
+                    }))
+                );
+
+                const headers = [
+                  "Failure",
+                  "Job",
+                  "Branch",
+                  "URL",
+                  "Failed Step",
+                  "Started At",
+                ];
+                const csvString = [
+                  headers.join(","),
+                  ...groupedData.map((row) =>
+                    [
+                      row.failure,
+                      row.job,
+                      row.branch,
+                      row.url,
+                      row.failedStep,
+                      row.started_at,
+                    ].join(",")
+                  ),
+                ].join("\n");
+
+                return csvString;
+              }}
+              generateJSONContent={() => {
+                const groupedData = Object.entries(groupedFailedJobs).map(
+                  ([failure, jobs]) => ({
+                    failure,
+                    jobs: jobs.map((job) => ({
+                      job: job.name,
+                      branch: job.branch,
+                      url: job.url,
+                      failedStep: job.failedStep?.name,
+                      started_at: job.started_at,
+                    })),
+                  })
+                );
+
+                const json = JSON.stringify(groupedData, null, 2);
+
+                return json;
+              }}
+            />
           </div>
         </DialogHeader>
         <div className="flex items-center space-x-2 mb-4">
