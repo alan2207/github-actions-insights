@@ -12,6 +12,7 @@ export type WorkflowRunJob = {
   completed_at: RestEndpointMethodTypes["actions"]["listJobsForWorkflowRun"]["response"]["data"]["jobs"][number]["completed_at"];
   status: RestEndpointMethodTypes["actions"]["listJobsForWorkflowRun"]["response"]["data"]["jobs"][number]["status"];
   steps: RestEndpointMethodTypes["actions"]["listJobsForWorkflowRun"]["response"]["data"]["jobs"][number]["steps"];
+  branch: RestEndpointMethodTypes["actions"]["listJobsForWorkflowRun"]["response"]["data"]["jobs"][number]["head_branch"];
 };
 
 export type WorkflowRun = {

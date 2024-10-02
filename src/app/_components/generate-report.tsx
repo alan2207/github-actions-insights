@@ -47,14 +47,18 @@ type JobStats = {
   totalDuration: number;
   failedJobs: {
     name: string;
+    branch: string;
     url: string;
     id: number;
     started_at: string;
-    failedStep: {
-      name: string;
-      started_at: string;
-      completed_at: string;
-    } | null | undefined;
+    failedStep:
+      | {
+          name: string;
+          started_at: string;
+          completed_at: string;
+        }
+      | null
+      | undefined;
   }[];
   count: number;
 };
@@ -74,8 +78,8 @@ export function GenerateReport({
 }) {
   const [jobsNameFilter, setJobsNameFilter] = useState("");
 
-  const [showSkipped, setShowSkipped] = useState(true);
-  const [showCancelled, setShowCancelled] = useState(true);
+  const [showSkipped, setShowSkipped] = useState(false);
+  const [showCancelled, setShowCancelled] = useState(false);
 
   const [isOpen, setIsOpen] = useState(false);
   const [report, setReport] = useState<{
@@ -178,6 +182,7 @@ export function GenerateReport({
                 );
                 jobStats[job.name].failedJobs.push({
                   name: job.id.toString(),
+                  branch: job.branch ?? "",
                   url: job.html_url ?? "",
                   id: job.id,
                   started_at: job.started_at ?? "",
@@ -212,8 +217,8 @@ export function GenerateReport({
       setReport(null);
       setError(null);
       setJobsNameFilter("");
-      setShowCancelled(true);
-      setShowSkipped(true);
+      setShowCancelled(false);
+      setShowSkipped(false);
     }
   }, [isOpen]);
 
@@ -325,18 +330,21 @@ export function GenerateReport({
                               <TableCell>{stats.skipped}</TableCell>
                             )}
                             <TableCell>
-                              {(
-                                stats.totalDuration /
-                                stats.count /
-                                1000
-                              ).toFixed(2)}
-                              s
+                              {stats.count > 0
+                                ? `${(
+                                    stats.totalDuration /
+                                    stats.count /
+                                    1000
+                                  ).toFixed(2)}s`
+                                : "N/A"}
                             </TableCell>
                             <TableCell>
-                              <FailedJobs
-                                jobName={jobName}
-                                failedJobs={stats.failedJobs}
-                              />
+                              {stats.failedJobs.length > 0 && (
+                                <FailedJobs
+                                  jobName={jobName}
+                                  failedJobs={stats.failedJobs}
+                                />
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}

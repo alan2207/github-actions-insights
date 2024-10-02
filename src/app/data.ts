@@ -154,6 +154,7 @@ export const getWorkflowRunJobs = async ({
     jobs: res.data.jobs.map((job) => ({
       id: job.id,
       name: job.name,
+      branch: job.head_branch,
       html_url: job.html_url,
       conclusion: job.conclusion,
       started_at: job.started_at,
