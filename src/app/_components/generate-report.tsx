@@ -232,6 +232,7 @@ export function GenerateReport({
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button
+          size="sm"
           onClick={() => generateReport("", showCancelled, showSkipped)}
           disabled={isLoading || workflowRuns.length === 0}
         >

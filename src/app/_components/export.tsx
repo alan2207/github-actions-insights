@@ -41,7 +41,9 @@ export const Export = ({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger disabled={disabled}>
-        <Button variant="outline">Export</Button>
+        <Button size="sm" variant="outline">
+          Export
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuItem onClick={() => handleExportToJSON("download")}>
